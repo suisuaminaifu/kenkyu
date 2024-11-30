@@ -4,36 +4,65 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
+	"os"
 	"os/exec"
+	"strings"
 )
 
-func extractTextFromPdf(pdfPath string) (string, error) {
+type PdfImage struct {
+	PdfPath    string
+	ImagePaths []string
+}
+
+func convertPdfToImage(pdfPath string) (PdfImage, error) {
+	imagePath := "./tmp/tmpPdfImage"
 	args := []string{
-		"-layout", // Maintain (as best as possible) the original physical layout of the text.
+		"-png",
+		"-progress",
 		pdfPath,
-		"-", // Send the output to stdout.
+		imagePath,
 	}
 
-	cmd := exec.CommandContext(context.TODO(), "pdftotext", args...)
+	cmd := exec.CommandContext(context.TODO(), "pdftoppm", args...)
 
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", err
+		return PdfImage{}, err
 	}
 
-	return buf.String(), nil
+	imagePaths := []string{}
+	imagePathLines := strings.Split(stderr.String(), "\n")
+	for _, imagePathLine := range imagePathLines {
+		if imagePathLine == "" {
+			continue
+		}
+
+		imagePaths = append(imagePaths, strings.Split(imagePathLine, " ")[2])
+	}
+
+	return PdfImage{
+		PdfPath:    pdfPath,
+		ImagePaths: imagePaths,
+	}, nil
+}
+
+func deleteImage(imagePath string) error {
+	return os.Remove(imagePath)
 }
 
 func main() {
 	fmt.Println("Hello, World from Kenkyu!")
 
-	result, err := extractTextFromPdf("test.pdf")
+	pdfImage, err := convertPdfToImage("test.pdf")
 	if err != nil {
-		fmt.Println("Error extracting text from PDF:", err)
+		log.Printf("convertPdfToImage error: %v\n", err)
 		return
 	}
 
-	fmt.Println(result)
+	fmt.Printf("%+v\n", pdfImage)
 }
