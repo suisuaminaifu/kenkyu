@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"log"
 	"os/exec"
 	"strings"
 )
@@ -29,6 +30,7 @@ func ConvertPdfToImage(pdfPath string) (PdfImage, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		log.Printf("pdftoppm error: %v\n", stderr.String())
 		return PdfImage{}, err
 	}
 
