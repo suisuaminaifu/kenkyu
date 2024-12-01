@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/invopop/jsonschema"
 	"github.com/openai/openai-go"
@@ -34,7 +33,7 @@ type ExtractionResult struct {
 	Title     string
 	Authors   []string
 	Content   string
-	CreatedAt time.Time
+	CreatedAt string
 }
 
 var ExtractionResultSchema = GenerateSchema[ExtractionResult]()
@@ -51,9 +50,13 @@ Process this research paper image and convert it to markdown format following th
    - Convert all text to markdown format
    - If the paper has a two-column layout, merge it into a single-column flow
    - Preserve the logical reading order of sections
+   - Keep all the equations, formulas, and mathematical expressions
+   - For equations, use LaTeX format, ensure to use double dollar sign, e.g. $$E=mc^2$$
+   - Be sure to keep all the lengthy content, e.g. theorems, propositions, etc.
    - Remove headers, footers, and other non-content elements
    - Maintain section headings and subheadings
    - Preserve all citations and references
+   - Think logically for markdown formatting based on the content, but keep close to the original layout
 
 3. Image handling:
    - Detect and preserve all figures, diagrams, and tables
@@ -67,7 +70,7 @@ Process this research paper image and convert it to markdown format following th
    - Follow with main content in sequential order
    - Include images with their descriptions at their original positions
    - If present, add citations/references section at the end
-   - Use standard markdown formatting
+   - Use standard markdown formatting with LaTeX equations
    - Avoid any special formatting or complex layouts
 
 5. Content cleanup:
