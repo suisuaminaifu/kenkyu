@@ -41,6 +41,11 @@ func ConvertPdfToImage(pdfPath string) (PdfImage, error) {
 			continue
 		}
 
+		log.Printf("imagePathLine: %s\n", imagePathLine)
+		if strings.HasPrefix(imagePathLine, "Syntax Error") {
+			continue
+		}
+
 		imagePaths = append(imagePaths, strings.Split(imagePathLine, " ")[2])
 	}
 

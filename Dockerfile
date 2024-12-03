@@ -20,7 +20,8 @@ WORKDIR /app
 
 COPY --from=build /build/main .
 COPY --from=build /build/tmp ./tmp
-COPY --from=build /build/test.pdf ./test.pdf
+COPY --from=build /build/test-1.pdf ./test-1.pdf
+COPY --from=build /build/test-2.pdf ./test-2.pdf
 
 # Create output directory with appropriate permissions
 RUN mkdir -p /app/output && chmod 777 /app/output
