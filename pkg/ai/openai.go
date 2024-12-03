@@ -30,10 +30,10 @@ func GenerateSchema[T any]() interface{} {
 }
 
 type ExtractionResult struct {
-	Title     string
-	Authors   []string
-	Content   string
-	CreatedAt string
+	Title     string   `json:"title" jsonschema_description:"The title of the paper"`
+	Authors   []string `json:"authors" jsonschema_description:"The authors of the paper"`
+	Content   string   `json:"content" jsonschema_description:"The content of the paper"`
+	CreatedAt string   `json:"createdAt" jsonschema_description:"The creation date of the paper"`
 }
 
 var ExtractionResultSchema = GenerateSchema[ExtractionResult]()
@@ -171,4 +171,161 @@ func ExtractContentFromImage(args ExtractContentFromImageArgs) (ExtractionResult
 	}
 
 	return extractionResult, nil
+}
+
+const REVIEW_PAPER_PROMPT = `You are a research paper review generator. Your task is to analyze multiple research papers and create a comprehensive review paper that synthesizes their findings, methodologies, and conclusions. Follow these specific guidelines:
+
+# Paper Structure and Formatting
+1. Title: Create a descriptive title that encompasses the main theme of the reviewed papers
+2. Abstract: Summarize the key findings and significance of the review (250-300 words)
+3. Introduction:
+   - Provide background context
+   - State the significance of the research area
+   - Define the scope of the review
+   - Present clear research questions/objectives
+
+4. Main Body:
+   - Organize content thematically rather than paper-by-paper
+   - Create logical sections based on key themes, methodologies, or findings
+   - Use subsections for better organization
+   - Include critical analysis and synthesis of findings
+   - Compare and contrast different approaches
+   - Highlight gaps in current research
+
+5. Methodology Review:
+   - Analyze research methods used across papers
+   - Compare experimental designs
+   - Evaluate data collection and analysis approaches
+
+6. Results Synthesis:
+   - Present consolidated findings
+   - Use tables and figures where appropriate
+   - Include statistical analyses when relevant
+
+7. Discussion:
+   - Synthesize key insights
+   - Identify patterns and trends
+   - Discuss contradictions or inconsistencies
+   - Suggest future research directions
+
+8. Conclusion:
+   - Summarize main findings
+   - State implications
+   - Suggest future work
+
+# Formatting Requirements
+1. Use Markdown formatting throughout
+2. Mathematical equations and formulas:
+   - Enclose in $$ $$ for display equations
+   - Use $ $ for inline equations
+   - Example: $$E = mc^2$$
+
+3. Images:
+   - Include relevant figures from source papers
+   - Format as: ![descriptive caption](placeholder_url)
+   - Add detailed captions explaining significance
+   - Place images strategically to support text
+
+4. Citations:
+   - Use numbered references [1], [2], etc.
+   - Include in-text citations where appropriate
+   - Provide full references list at end
+
+# Content Guidelines
+1. Length:
+   - Expand each section fully based on available content
+   - Include detailed explanations and analysis
+   - Use multiple paragraphs per subtopic
+   - Aim for comprehensive coverage while maintaining relevance
+
+2. Technical Depth:
+   - Maintain advanced technical level throughout
+   - Explain complex concepts thoroughly
+   - Include relevant technical details and specifications
+   - Define specialized terms when first used
+
+3. Analysis Quality:
+   - Provide critical evaluation of methodologies
+   - Identify strengths and limitations
+   - Compare effectiveness of different approaches
+   - Support claims with evidence from papers
+
+4. Synthesis:
+   - Draw connections between different papers
+   - Identify common themes and patterns
+   - Highlight contradictions and agreements
+   - Suggest unified frameworks where possible
+
+# Output Format
+Generate the review paper in clean Markdown format, maintaining consistent heading levels and proper spacing. Ensure all mathematical notation, images, and citations are properly formatted according to the specified guidelines.
+`
+
+type ReviewPaper struct {
+	PaperTitle   string
+	PaperFileUrl string
+}
+
+type ReviewPaperResult struct {
+	Title      string   `json:"title" jsonschema_description:"The title of the review paper"`
+	Content    string   `json:"content" jsonschema_description:"The content of the review paper"`
+	References []string `json:"references" jsonschema_description:"The references of the review paper"`
+}
+
+var ReviewPaperSchema = GenerateSchema[ReviewPaperResult]()
+
+func GenerateReviewPaper(papers []ReviewPaper) (ReviewPaperResult, error) {
+	key := os.Getenv("OPENAI_API_KEY")
+	if key == "" {
+		return ReviewPaperResult{}, errors.New("OPENAI_API_KEY environment variable is not set")
+	}
+
+	client := openai.NewClient(
+		option.WithAPIKey(key),
+	)
+
+	schemaParam := openai.ResponseFormatJSONSchemaJSONSchemaParam{
+		Name:        openai.F("reviewPaper"),
+		Description: openai.F("The review paper of the paper"),
+		Schema:      openai.F(ReviewPaperSchema),
+		Strict:      openai.Bool(true),
+	}
+
+	var papersToReviewMessages []openai.ChatCompletionMessageParamUnion
+
+	papersToReviewMessages = append(papersToReviewMessages, openai.UserMessage(REVIEW_PAPER_PROMPT))
+
+	for _, paper := range papers {
+		content, err := os.ReadFile(paper.PaperFileUrl)
+		if err != nil {
+			return ReviewPaperResult{}, fmt.Errorf("failed to read paper file %s: %w", paper.PaperFileUrl, err)
+		}
+
+		paperMessage := fmt.Sprintf("Paper Title: %s\n\nContent:\n%s", paper.PaperTitle, string(content))
+		papersToReviewMessages = append(papersToReviewMessages, openai.UserMessage(paperMessage))
+	}
+
+	chatCompletion, err := client.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
+		Messages: openai.F(papersToReviewMessages),
+		ResponseFormat: openai.F[openai.ChatCompletionNewParamsResponseFormatUnion](
+			openai.ResponseFormatJSONSchemaParam{
+				Type:       openai.F(openai.ResponseFormatJSONSchemaTypeJSONSchema),
+				JSONSchema: openai.F(schemaParam),
+			},
+		),
+		Model:               openai.F(openai.ChatModelGPT4o),
+		MaxCompletionTokens: openai.Int(4096),
+	})
+
+	if err != nil {
+		return ReviewPaperResult{}, err
+	}
+
+	var reviewPaperResult ReviewPaperResult
+
+	err = json.Unmarshal([]byte(chatCompletion.Choices[0].Message.Content), &reviewPaperResult)
+	if err != nil {
+		return ReviewPaperResult{}, err
+	}
+
+	return reviewPaperResult, nil
 }
